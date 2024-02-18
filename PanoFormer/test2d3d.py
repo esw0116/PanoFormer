@@ -56,11 +56,20 @@ def main():
         Image.fromarray(output_depth_colorized).save(os.path.join('outputs', img_name+img_ext))
 
         # Unproject to point cloud
+        H, W = output_depth.shape[-2:]
+        depth = output_depth.squeeze(0).squeeze(0).numpy()
+
         img = cv2.imread(input_file)
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
-        H, W = output_depth.shape[-2:]
-        depth = output_depth.squeeze(0).squeeze(0).numpy()
+        try:
+            mask = cv2.imread(mask_path)
+            mask = cv2.cvtColor(mask, cv2.COLOR_BGR2RGB)
+            mask = cv2.resize(mask, dsize=(W, H), interpolation=cv2.INTER_NEAREST)
+        except:
+            mask = np.ones((512, 1024))
+        mask = mask.reshape(-1)
+
         equi_x, equi_y = np.meshgrid(np.arange(W, dtype=np.float32), np.arange(H, dtype=np.float32), indexing='xy')
         # Move the center of image
         moved_x = equi_x - W / 2 + 0.5
@@ -76,14 +85,13 @@ def main():
         y = np.cos(latitude) * np.cos(longitude) * depth
         z = np.sin(latitude) * depth
         
-        point = np.stack([x.reshape(-1), y.reshape(-1), z.reshape(-1)], axis=-1)
-        color = img.reshape(-1, 3).astype(np.float32)/255.
+        point = (np.stack([x.reshape(-1), y.reshape(-1), z.reshape(-1)], axis=-1))[np.where(mask)]
+        color = (img.reshape(-1, 3).astype(np.float32)/255.)[np.where(mask)]
         pcd_o3d = o3d.geometry.PointCloud()
 
         pcd_o3d.points = o3d.utility.Vector3dVector(point)
         pcd_o3d.colors = o3d.utility.Vector3dVector(color)
         o3d.io.write_point_cloud(os.path.join('outputs', img_name+'.ply'), pcd_o3d)
-        breakpoint()
 
 
 if __name__ == "__main__":
