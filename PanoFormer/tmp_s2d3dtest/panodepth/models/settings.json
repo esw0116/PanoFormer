@@ -1,0 +1,17 @@
+{
+  "num_workers": 8,
+  "gpu_devices": [
+    0
+  ],
+  "model_name": "panodepth",
+  "learning_rate": 0.0001,
+  "batch_size": 2,
+  "num_epochs": 200,
+  "load_weights_dir": "./tmp_s2d3d/panodepth/models/weights",
+  "log_dir": "/mnt/disk1/esw0116/code/3Dscenegen/PanoFormer/PanoFormer/tmp_s2d3dtest",
+  "log_frequency": 100,
+  "save_frequency": 1,
+  "disable_color_augmentation": false,
+  "disable_LR_filp_augmentation": false,
+  "disable_yaw_rotation_augmentation": false
+}
