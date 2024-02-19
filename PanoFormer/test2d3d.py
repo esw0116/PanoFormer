@@ -6,6 +6,7 @@ import numpy as np
 import open3d as o3d
 import cv2
 
+import cam_utils
 from testers2d3d import Trainer
 
 parser = argparse.ArgumentParser(description="360 Degree Panorama Depth Estimation Training")
@@ -70,22 +71,13 @@ def main():
             mask = np.ones((512, 1024))
         mask = mask.reshape(-1)
 
-        equi_x, equi_y = np.meshgrid(np.arange(W, dtype=np.float32), np.arange(H, dtype=np.float32), indexing='xy')
-        # Move the center of image
-        moved_x = equi_x - W / 2 + 0.5
-        moved_y = (-1) * equi_y + H / 2 + 0.5
-        # Normalize coordinates
-        norm_x = moved_x / (W / 2 - 0.5)
-        norm_y = moved_y / (H / 2 - 0.5)
-        # Calculate longitude and latitude
-        longitude = norm_x * np.pi
-        latitude = norm_y * np.pi / 2
+        # intrinsic matrix K (from phi theta to u v)
+        K = np.array([[(W/2 - 0.5)/np.pi, 0., W/2 - 0.5],
+            [0., -2*(H/2 - 0.5)/np.pi, H/2 - 0.5],
+            [0.,  0.,  1.]]).astype(np.float32)
 
-        x = np.cos(latitude) * np.sin(longitude) * depth
-        y = np.cos(latitude) * np.cos(longitude) * depth
-        z = np.sin(latitude) * depth
-        
-        point = (np.stack([x.reshape(-1), y.reshape(-1), z.reshape(-1)], axis=-1))[np.where(mask)]
+        point = cam_utils.uv2sphere(depth, H, W, K).transpose((1,0))
+        point = point[np.where(mask)]
         color = (img.reshape(-1, 3).astype(np.float32)/255.)[np.where(mask)]
         pcd_o3d = o3d.geometry.PointCloud()
 
