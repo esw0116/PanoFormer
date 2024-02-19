@@ -76,7 +76,7 @@ def main():
             mask = cv2.cvtColor(mask, cv2.COLOR_BGR2RGB)
             mask = cv2.resize(mask, dsize=(W, H), interpolation=cv2.INTER_NEAREST)
         except:
-            mask = np.ones((512, 1024))
+            mask = np.ones((H, W))
         mask = mask.reshape(-1)
 
         # intrinsic matrix K (from phi theta to u v)
@@ -98,7 +98,7 @@ def main():
         # re_point = point + np.stack([np.zeros(512*1024), np.ones(512*1024), np.zeros(512*1024)], axis=-1)
         # re_img, re_depth = cam_utils.sphere2erp(re_point.transpose(1,0), color.transpose(1,0), H, W, K)
         # Image.fromarray(re_img).save(os.path.join('outputs', img_name, img_name+'_reproj.png'))
-        # color_depth = colorize(output_depth)
+        # color_depth = colorize(re_depth)
         # Image.fromarray(color_depth).save(os.path.join('outputs', img_name, img_name+'_redepth.png'))
 
 
