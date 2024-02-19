@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.interpolate import griddata
 
 
 def uv2sphere(depth, H, W, K):
@@ -22,12 +23,27 @@ def uv2sphere(depth, H, W, K):
 
 
 
-def sphere2erp(coord_cam):
-    # coord_cam: (N, 3), N: # of points, X, Y, Z
+def sphere2erp(coord_cam, color_cam, H, W, K):
+    # coord_cam: (3, N), N: # of points, (X, Y, Z)
+    # color_cam: (3, N), (R, G, B)
 
-    dist = np.sqrt(np.sum(np.power(coord_cam, 2), axis=1, keepdims=True))
-    dist_xy = np.sqrt(np.sum(np.power(coord_cam[:2], 2), axis=1, keepdims=True))
+    N = coord_cam.shape[1]
+    dist = np.sqrt(np.sum(np.power(coord_cam, 2), axis=0)+1e-6)
+    dist_xy = np.sqrt(np.sum(np.power(coord_cam[:2], 2), axis=0)+1e-6)
 
-    latitude = np.arcsin(coord_cam[2:] / dist)
-    longitude = np.arccos(coord_cam[1:2] / dist_xy) * np.sign(coord_cam[:1])
+    lat = np.arcsin(coord_cam[2] / dist)
+    lon = np.arccos(coord_cam[1] / dist_xy) * np.sign(coord_cam[0])
 
+    coord_erp = np.stack([lon, lat, np.ones(N)], axis=0)
+    coord_uv = np.matmul(K, coord_erp)
+    u, v = coord_uv[0], coord_uv[1]
+    
+    x, y = np.meshgrid(np.arange(W, dtype=np.float32), np.arange(H, dtype=np.float32), indexing='xy')
+    grid = np.stack((x,y), axis=-1).reshape(-1,2)
+
+    omni_img = griddata(coord_uv[:2].transpose(1,0), color_cam.transpose(1,0), grid, method='linear', fill_value=0).reshape(H,W,3)
+    omni_depth = griddata(coord_uv[:2].transpose(1,0), dist, grid, method='linear', fill_value=0).reshape(H,W)
+
+    omni_img = np.round(omni_img*255).astype(np.uint8)
+
+    return omni_img, omni_depth

@@ -8,6 +8,8 @@ import cv2
 
 import cam_utils
 from testers2d3d import Trainer
+from utils import colorize
+
 
 parser = argparse.ArgumentParser(description="360 Degree Panorama Depth Estimation Training")
 
@@ -42,26 +44,32 @@ args = parser.parse_args()
 
 def main():
     trainer = Trainer(args)
-    input_files = sorted(glob.glob(os.path.join(args.input_folder, '*.png')))
+    input_files = sorted(glob.glob(os.path.join(args.input_folder, '*.png'))) + sorted(glob.glob(os.path.join(args.input_folder, '*.jpg')))
     for input_file in input_files:
         dir_name, img_name, img_ext = os.path.dirname(input_file), os.path.splitext(os.path.basename(input_file))[0], os.path.splitext(os.path.basename(input_file))[1]
         print(img_name)
         if img_name.endswith('_mask'):
             continue
-
         mask_file = os.path.join(dir_name, img_name+'_mask'+img_ext)
 
         output_depth, output_depth_colorized, mask_flag = trainer.process_batch(input_file, mask_file)
         if mask_flag:
             img_name = img_name + '_withmask'
-        Image.fromarray(output_depth_colorized).save(os.path.join('outputs', img_name+img_ext))
+
+        # Create output folder
+        if not os.path.exists(os.path.join('outputs', img_name)):
+            os.makedirs(os.path.join('outputs', img_name))
+
+        Image.fromarray(output_depth_colorized).save(os.path.join('outputs', img_name, img_name+'_depth.png'))
 
         # Unproject to point cloud
         H, W = output_depth.shape[-2:]
-        depth = output_depth.squeeze(0).squeeze(0).numpy()
+        scale = H / 512
+        depth = output_depth.squeeze(0).squeeze(0).numpy() * scale
 
         img = cv2.imread(input_file)
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        Image.fromarray(img).save(os.path.join('outputs', img_name, img_name+'.png'))
 
         try:
             mask = cv2.imread(mask_path)
@@ -83,7 +91,15 @@ def main():
 
         pcd_o3d.points = o3d.utility.Vector3dVector(point)
         pcd_o3d.colors = o3d.utility.Vector3dVector(color)
-        o3d.io.write_point_cloud(os.path.join('outputs', img_name+'.ply'), pcd_o3d)
+        o3d.io.write_point_cloud(os.path.join('outputs', img_name, img_name+'_pcd.ply'), pcd_o3d)
+
+
+        # re-project image
+        # re_point = point + np.stack([np.zeros(512*1024), np.ones(512*1024), np.zeros(512*1024)], axis=-1)
+        # re_img, re_depth = cam_utils.sphere2erp(re_point.transpose(1,0), color.transpose(1,0), H, W, K)
+        # Image.fromarray(re_img).save(os.path.join('outputs', img_name, img_name+'_reproj.png'))
+        # color_depth = colorize(output_depth)
+        # Image.fromarray(color_depth).save(os.path.join('outputs', img_name, img_name+'_redepth.png'))
 
 
 if __name__ == "__main__":
