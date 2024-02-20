@@ -24,7 +24,7 @@ class Trainer:
         self.to_tensor = transforms.ToTensor()
         self.normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 
-        self.log_path = os.path.join(self.settings.log_dir, self.settings.model_name)
+        # self.log_path = os.path.join(self.settings.log_dir, self.settings.model_name)
 
         self.model = PanoBiT()
         self.model.to(self.device)
@@ -34,16 +34,16 @@ class Trainer:
             self.load_model()
 
         print("Training model named:\n ", self.settings.model_name)
-        print("Models and tensorboard events files are saved to:\n", self.settings.log_dir)
+        # print("Models and tensorboard events files are saved to:\n", self.settings.log_dir)
         print("Training is using:\n ", self.device)
 
         # self.evaluator = Evaluator()
         # self.save_settings()
 
 
-    def process_batch(self, img_path, mask_path):
-        img = cv2.imread(img_path)
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    def process_batch(self, img, mask):
+        # img = cv2.imread(img_path)
+        # img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         h, w = img.shape[:2]
         img = cv2.resize(img, dsize=(1024, 512), interpolation=cv2.INTER_CUBIC)
 
@@ -53,19 +53,18 @@ class Trainer:
         inputs = inputs.to(self.device)
 
         # Process mask if exists
-        try:
-            mask = cv2.imread(mask_path)
-            mask = cv2.cvtColor(mask, cv2.COLOR_BGR2RGB)
-            h, w = mask.shape[:2]
+        if mask is not None:
+            # mask = cv2.imread(mask_path)
+            # mask = cv2.cvtColor(mask, cv2.COLOR_BGR2RGB)
             mask = cv2.resize(mask, dsize=(1024, 512), interpolation=cv2.INTER_NEAREST)
             mask = self.to_tensor(mask)
             mask = mask.unsqueeze(0)
             mask = mask.to(self.device)
-            mask_flag = True
-        except:
+            # mask_flag = True
+        else:
             print('Mask image not found')
             mask = torch.ones_like(inputs)
-            mask_flag = False
+            # mask_flag = False
 
         inputs = inputs * mask
 
@@ -73,12 +72,10 @@ class Trainer:
             outputs = self.model(inputs)
         output_depth = outputs["pred_depth"]
         output_depth = output_depth * mask[:, 0:1]
-        # breakpoint()
 
         output_depth = F.interpolate(output_depth, size=(h, w), mode='bicubic', align_corners=True).cpu()
-        output_depth_colorized = colorize(output_depth)
 
-        return output_depth, output_depth_colorized, mask_flag
+        return output_depth
 
     # def validate(self):
     #     """Validate the model on the validation set

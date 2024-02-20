@@ -8,7 +8,8 @@ import cv2
 
 import cam_utils
 from testers2d3d import Trainer
-from utils import colorize
+from utils import colorize, Marigold_estimation
+from Marigold.marigold_pipeline import MarigoldPipeline
 
 
 parser = argparse.ArgumentParser(description="360 Degree Panorama Depth Estimation Training")
@@ -43,15 +44,11 @@ args = parser.parse_args()
 
 
 def main():
-    trainer = Trainer(args)
-    input_files = sorted(glob.glob(os.path.join(args.input_folder, '*.png'))) + sorted(glob.glob(os.path.join(args.input_folder, '*.jpg')))
-    for input_file in input_files:
-        # dir_name, img_name, img_ext = os.path.dirname(input_file), os.path.splitext(os.path.basename(input_file))[0], os.path.splitext(os.path.basename(input_file))[1]
-        # print(img_name)
-        # if img_name.endswith('_mask'):
-        #     continue
-        # mask_file = os.path.join(dir_name, img_name+'_mask'+img_ext)
+    marigold_model = MarigoldPipeline.from_pretrained('tmp_s2d3d/Marigold_v1_merged').to('cuda')
 
+    trainer = Trainer(args)
+    input_files = sorted(glob.glob(os.path.join(args.input_folder, '*.png')) + glob.glob(os.path.join(args.input_folder, '*.jpg')))
+    for input_file in input_files:
         dir_name, img_name, img_ext = os.path.dirname(input_file), os.path.splitext(os.path.basename(input_file))[0], os.path.splitext(os.path.basename(input_file))[1]
         mask_file = os.path.join(dir_name, img_name+'_mask'+img_ext)
 
@@ -68,26 +65,27 @@ def main():
             mask = cv2.imread(mask_file)
             mask = cv2.cvtColor(mask, cv2.COLOR_BGR2RGB)
             img_name = img_name + '_withmask'
-            # mask_flag = True
         except:
             mask = None
-            # mask_flag = False
-        
-        # if mask_flag:
-        #     img_name = img_name + '_withmask'
-        # Create output folder
-        if not os.path.exists(os.path.join('outputs', img_name)):
-            os.makedirs(os.path.join('outputs', img_name))
 
-        output_depth = trainer.process_batch(img, mask)
-        output_depth_colorized = colorize(output_depth)
-        Image.fromarray(img).save(os.path.join('outputs', img_name, img_name+'.png'))
-        Image.fromarray(output_depth_colorized).save(os.path.join('outputs', img_name, img_name+'_depth.png'))
+        # Create output folder
+        if not os.path.exists(os.path.join('outputs', 'Marigold', img_name)):
+            os.makedirs(os.path.join('outputs', 'Marigold', img_name))
+
+        depth_mari = Marigold_estimation(marigold_model, Image.fromarray(img))
+        depth_pano = trainer.process_batch(img, mask)
+        depth_mari_low, depth_mari_high = np.quantile(depth_mari, 0.15), np.quantile(depth_mari, 0.85)
+        depth_pano_low, depth_pano_high = np.quantile(depth_pano, 0.15), np.quantile(depth_pano, 0.85)
+        depth_mari = (depth_pano_high - depth_pano_low) / (depth_mari_high - depth_mari_low) * (depth_mari - depth_mari_low) + depth_pano_low
+        depth_colorized = colorize(depth_mari)
+
+        Image.fromarray(img).save(os.path.join('outputs', 'Marigold', img_name, img_name+'.png'))
+        Image.fromarray(depth_colorized).save(os.path.join('outputs', 'Marigold', img_name, img_name+'_depth.png'))
 
         # Unproject to point cloud
-        H, W = output_depth.shape[-2:]
+        H, W = depth_mari.shape[-2:]
         scale = H / 512
-        depth = output_depth.squeeze(0).squeeze(0).numpy() * scale
+        depth = depth_mari * scale
 
         if mask is None:
             mask = np.ones((H, W))
@@ -107,14 +105,14 @@ def main():
 
         pcd_o3d.points = o3d.utility.Vector3dVector(point)
         pcd_o3d.colors = o3d.utility.Vector3dVector(color)
-        o3d.io.write_point_cloud(os.path.join('outputs', img_name, img_name+'_pcd.ply'), pcd_o3d)
+        o3d.io.write_point_cloud(os.path.join('outputs', 'Marigold', img_name, img_name+'_pcd.ply'), pcd_o3d)
 
         # re-project image
         # re_point = point + np.stack([np.zeros(512*1024), np.ones(512*1024), np.zeros(512*1024)], axis=-1)
         # re_img, re_depth = cam_utils.sphere2erp(re_point.transpose(1,0), color.transpose(1,0), H, W, K)
-        # Image.fromarray(re_img).save(os.path.join('outputs', img_name, img_name+'_reproj.png'))
+        # Image.fromarray(re_img).save(os.path.join('outputs', 'Marigold', img_name, img_name+'_reproj.png'))
         # color_depth = colorize(re_depth)
-        # Image.fromarray(color_depth).save(os.path.join('outputs', img_name, img_name+'_redepth.png'))
+        # Image.fromarray(color_depth).save(os.path.join('outputs', 'Marigold', img_name, img_name+'_redepth.png'))
 
 
 if __name__ == "__main__":
