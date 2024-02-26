@@ -100,6 +100,9 @@ def main():
 
         point = cam_utils.uv2sphere(depth, H, W, K).transpose((1,0))
         point = point[np.where(mask)]
+        point = point[:, [0,2,1]]
+        point = point * np.array([[1,-1,1]])
+
         color = (img.reshape(-1, 3).astype(np.float32)/255.)[np.where(mask)]
         pcd_o3d = o3d.geometry.PointCloud()
 
