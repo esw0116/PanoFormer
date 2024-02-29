@@ -1,4 +1,15 @@
 # PanoFormer
+
+## Code for converting video to 3Ds
+1. Download weights of Marigold from [link]() and extract in Panoformer/tmp2d3d
+2. create environment using ```environment.yml```
+3. put the videos(mp4) into a designated folder
+4. Run the code below
+```
+python testmarigold2d3d_video.py --input_folder [input_folder]
+```
+
+
 :triangular_flag_on_post::triangular_flag_on_post::triangular_flag_on_post:This is the pytorch implementation of PanoFormer (PanoFormer: Panorama Transformer for Indoor 360° Depth Estimation, ECCV 2022)!  
 # Methodology
 <table>
