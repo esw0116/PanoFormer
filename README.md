@@ -1,7 +1,7 @@
 # PanoFormer
 
 ## Code for converting video to 3Ds
-1. Download weights of Marigold from [link]() and extract in Panoformer/tmp2d3d
+1. Download weights of Marigold from [link](https://1drv.ms/u/s!ApIOsE7OB8Uahd5TM9JdQCf4XxDaUw?e=Fff80o) and extract in Panoformer/tmp2d3d
 2. create environment using ```environment.yml```
 3. put the videos(mp4) into a designated folder
 4. Run the code below
