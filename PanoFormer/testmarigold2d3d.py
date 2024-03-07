@@ -5,6 +5,7 @@ from PIL import Image
 import numpy as np
 import open3d as o3d
 import cv2
+import json
 
 import cam_utils
 from testers2d3d import Trainer
@@ -79,13 +80,14 @@ def main():
         depth_mari = (depth_pano_high - depth_pano_low) / (depth_mari_high - depth_mari_low) * (depth_mari - depth_mari_low) + depth_pano_low
         depth_colorized = colorize(depth_mari)
 
-        Image.fromarray(img).save(os.path.join('outputs', 'Marigold', img_name, img_name+'.png'))
-        Image.fromarray(depth_colorized).save(os.path.join('outputs', 'Marigold', img_name, img_name+'_depth.png'))
+        Image.fromarray(img).save(os.path.join('outputs', 'Marigold', img_name, 'image.png'))
+        Image.fromarray(depth_colorized).save(os.path.join('outputs', 'Marigold', img_name, 'depth.png'))
 
         # Unproject to point cloud
         H, W = depth_mari.shape[-2:]
         scale = H / 512
         depth = depth_mari * scale
+        np.save(os.path.join('outputs', 'Marigold', img_name, 'depth.npy'), depth)
 
         if mask is None:
             mask = np.ones((H, W))
@@ -100,23 +102,59 @@ def main():
 
         point = cam_utils.uv2sphere(depth, H, W, K).transpose((1,0))
         point = point[np.where(mask)]
-        point = point[:, [0,2,1]]
-        point = point * np.array([[1,-1,1]])
+        # point = point[:, [0,2,1]]
+        # point = point * np.array([[1,-1,1]])
 
         color = (img.reshape(-1, 3).astype(np.float32)/255.)[np.where(mask)]
         pcd_o3d = o3d.geometry.PointCloud()
 
         pcd_o3d.points = o3d.utility.Vector3dVector(point)
         pcd_o3d.colors = o3d.utility.Vector3dVector(color)
-        o3d.io.write_point_cloud(os.path.join('outputs', 'Marigold', img_name, img_name+'_pcd.ply'), pcd_o3d)
+        o3d.io.write_point_cloud(os.path.join('outputs', 'Marigold', img_name, 'points3d.ply'), pcd_o3d)
 
-        # re-project image
-        # re_point = point + np.stack([np.zeros(512*1024), np.ones(512*1024), np.zeros(512*1024)], axis=-1)
-        # re_img, re_depth = cam_utils.sphere2erp(re_point.transpose(1,0), color.transpose(1,0), H, W, K)
-        # Image.fromarray(re_img).save(os.path.join('outputs', 'Marigold', img_name, img_name+'_reproj.png'))
-        # color_depth = colorize(re_depth)
-        # Image.fromarray(color_depth).save(os.path.join('outputs', 'Marigold', img_name, img_name+'_redepth.png'))
+        blender_train_json = {}
+        blender_train_json["camera_angle_x"] = 0.8279103882874479
+        blender_train_json["frames"] = []
+        w2c = np.identity(4)
+        w2c[1,1] = -1
+        w2c[2,2] = -1
 
+        curr_frame = {}
+        curr_frame["file_path"] = "image"
+        curr_frame["depth_path"] = "depth"
+        curr_frame["transform_matrix"] = w2c.tolist()
+        (blender_train_json["frames"]).append(curr_frame)
+
+        movement = np.array([[0.5,0,0], [-0.5,0,0], [0,0.5,0], [0,-0.5,0], [0,0,0.5], [0,0,-0.5]])
+        for idx in range(6):
+            mypoint = (point + movement[idx]).transpose((1,0))
+            image, depth = cam_utils.sphere2uv(mypoint, color, H, W, K)
+            Image.fromarray(image).save(os.path.join('outputs', 'Marigold', img_name, f'image{idx+1:02d}.png'))
+            np.save(os.path.join('outputs', 'Marigold', img_name, f'depth{idx+1:02d}.npy'), depth)
+
+            w2c = np.identity(4)
+            w2c[1,1] = -1
+            w2c[2,2] = -1
+            w2c[:3, 3] = movement[idx] * np.array([1, -1, -1])
+
+            curr_frame = {}
+            curr_frame["file_path"] = "image{:02d}".format(idx+1)
+            curr_frame["depth_path"] = "depth{:02d}".format(idx+1)
+            curr_frame["transform_matrix"] = w2c.tolist()
+            (blender_train_json["frames"]).append(curr_frame)
+
+            # For validation
+            # mycoord = cam_utils.uv2sphere(depth, H, W, K).transpose((1,0))
+            # mycolor = (image.reshape(-1, 3).astype(np.float32)/255.)
+            # pcd_o3d = o3d.geometry.PointCloud()
+
+            # pcd_o3d.points = o3d.utility.Vector3dVector(point)
+            # pcd_o3d.colors = o3d.utility.Vector3dVector(color)
+            # o3d.io.write_point_cloud(os.path.join('outputs', 'Marigold', img_name, f'points3d{idx+1}.ply'), pcd_o3d)
+
+        train_json_path = os.path.join('outputs', 'Marigold', img_name, 'transforms_train.json')
+        with open(train_json_path, 'w') as outfile:
+            json.dump(blender_train_json, outfile, indent=4)
 
 if __name__ == "__main__":
     main()

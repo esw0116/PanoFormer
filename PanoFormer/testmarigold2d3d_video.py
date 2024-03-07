@@ -5,6 +5,7 @@ import numpy as np
 import open3d as o3d
 import cv2
 import imageio
+import json
 
 import cam_utils
 from testers2d3d import Trainer
@@ -79,13 +80,13 @@ def main():
             depth_mari = (depth_pano_high - depth_pano_low) / (depth_mari_high - depth_mari_low) * (depth_mari - depth_mari_low) + depth_pano_low
             depth_colorized = colorize(depth_mari)
 
-            Image.fromarray(img).save(os.path.join('outputs_video', vid_name, f'{i:03d}', 'image.png'))
-            Image.fromarray(depth_colorized).save(os.path.join('outputs_video', vid_name, f'{i:03d}', 'depth.png'))
-            np.save(os.path.join('outputs_video', vid_name, f'{i:03d}', 'depth.npy'), depth_mari)
+            Image.fromarray(img).save(os.path.join('outputs_video', vid_name, f'{i:03d}', 'image00.png'))
+            Image.fromarray(depth_colorized).save(os.path.join('outputs_video', vid_name, f'{i:03d}', 'depth00.png'))
 
             # Unproject to point cloud
             scale = H / 512
             depth = depth_mari * scale
+            np.save(os.path.join('outputs_video', vid_name, f'{i:03d}', 'depth00.npy'), depth)
 
             # intrinsic matrix K (from phi theta to u v)
             K = np.array([[(W/2 - 0.5)/np.pi, 0., W/2 - 0.5],
@@ -93,15 +94,47 @@ def main():
                 [0.,  0.,  1.]]).astype(np.float32)
 
             point = cam_utils.uv2sphere(depth, H, W, K).transpose((1,0))
-            point = point[:, [0,2,1]]
-            point = point * np.array([[1,-1,1]])
-
             color = img.reshape(-1, 3).astype(np.float32)/255.
             pcd_o3d = o3d.geometry.PointCloud()
             pcd_o3d.points = o3d.utility.Vector3dVector(point)
             pcd_o3d.colors = o3d.utility.Vector3dVector(color)
             o3d.io.write_point_cloud(os.path.join('outputs_video', vid_name, f'{i:03d}', 'blender.ply'), pcd_o3d)
 
+
+            blender_train_json = {}
+            blender_train_json["camera_angle_x"] = 0.8279103882874479
+            blender_train_json["frames"] = []
+            w2c = np.identity(4)
+            w2c[1,1] = -1
+            w2c[2,2] = -1
+
+            curr_frame = {}
+            curr_frame["file_path"] = "image00"
+            curr_frame["depth_path"] = "depth00"
+            curr_frame["transform_matrix"] = w2c.tolist()
+            (blender_train_json["frames"]).append(curr_frame)
+
+            movement = np.array([[0.5,0,0], [-0.5,0,0], [0,0.5,0], [0,-0.5,0], [0,0,0.5], [0,0,-0.5]])
+            for idx in range(6):
+                mypoint = (point + movement[idx]).transpose((1,0))
+                image, depth = cam_utils.sphere2uv(mypoint, color, H, W, K)
+                Image.fromarray(image).save(os.path.join('outputs_video', vid_name, f'{i:03d}', f'image{idx+1:02d}.png'))
+                np.save(os.path.join('outputs_video', vid_name, f'{i:03d}', f'depth{idx+1:02d}.npy'), depth)
+
+                w2c = np.identity(4)
+                w2c[1,1] = -1
+                w2c[2,2] = -1
+                w2c[:3, 3] = movement[idx] * np.array([1, -1, -1])
+
+                curr_frame = {}
+                curr_frame["file_path"] = "image{:02d}".format(idx+1)
+                curr_frame["depth_path"] = "depth{:02d}".format(idx+1)
+                curr_frame["transform_matrix"] = w2c.tolist()
+                (blender_train_json["frames"]).append(curr_frame)
+
+            train_json_path = os.path.join('outputs_video', vid_name, 'transforms_train.json')
+            with open(train_json_path, 'w') as outfile:
+                json.dump(blender_train_json, outfile, indent=4)
 
 if __name__ == "__main__":
     main()
